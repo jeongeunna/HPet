@@ -90,14 +90,14 @@ class HPetStore {
     if (!state.history['2026-08-01']) {
       state.history['2026-08-01'] = { supplements: true, turtleCount: 1 };
       state.history['2026-08-05'] = { supplements: true, turtleCount: 0 };
-      
+
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       state.history[todayStr] = { supplements: true, turtleCount: 3 }; // 오늘 날짜에도 데이터 주입
-      
+
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(state));
     }
-    
+
     return state;
   }
 
@@ -151,10 +151,10 @@ class HPetSound {
     try {
       this.init();
       if (this.ctx.state === 'suspended') this.ctx.resume();
-      
+
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
-      
+
       osc.type = type;
       osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
       gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
@@ -201,7 +201,7 @@ class HPetRouter {
 
   navigateTo(viewName) {
     if (!this.views[viewName]) return;
-    
+
     window.hpetSound.playBeep(600, 0.05);
 
     // 이전 뷰의 leave 이벤트 발행 (카메라 스트림 정리 등)
@@ -221,13 +221,16 @@ class HPetRouter {
 
     // Header & Bottom Nav visibility logic
     if (viewName === 'auth' || viewName === 'cameraAuth' || viewName === 'postureGame') {
-      this.header.classList.add('hidden');
+      if (this.header) this.header.classList.add('hidden');
       this.nav.classList.add('hidden');
     } else if (viewName === 'profileSetup') {
-      this.header.classList.add('hidden');
+      if (this.header) this.header.classList.add('hidden');
       this.nav.classList.add('hidden');
+    } else if (viewName === 'profile') {
+      if (this.header) this.header.classList.add('hidden');
+      this.nav.classList.remove('hidden');
     } else {
-      this.header.classList.remove('hidden');
+      if (this.header) this.header.classList.remove('hidden');
       this.nav.classList.remove('hidden');
     }
 
@@ -273,7 +276,7 @@ const HPetUI = {
           window.hpetStore.state.user.name = me.name;
         }
         window.hpetRouter.navigateTo('dashboard');
-      } catch(err) {
+      } catch (err) {
         window.hpetApi.clearTokens();
         window.hpetStore.state.user.isLoggedIn = false;
         window.hpetRouter.navigateTo('auth');
@@ -307,14 +310,14 @@ const HPetUI = {
       e.preventDefault();
       const email = document.getElementById('login-email').value;
       const pw = document.getElementById('login-password').value;
-      
+
       try {
         await window.hpetApi.login(email, pw);
         const me = await window.hpetApi.getMyInfo();
-        
+
         window.hpetStore.state.user.isLoggedIn = true;
         if (me && me.name) {
-           window.hpetStore.state.user.name = me.name;
+          window.hpetStore.state.user.name = me.name;
         }
         window.hpetStore.saveState();
         window.hpetSound.playSuccess();
@@ -335,17 +338,56 @@ const HPetUI = {
         return;
       }
 
+      // Check terms agreement
+      const termsAgreed = document.getElementById('signup-terms').checked;
+      if (!termsAgreed) {
+        alert("이용약관 및 개인정보 처리방침에 동의해주세요.");
+        return;
+      }
+
       try {
         await window.hpetApi.signup(email, pw);
-        await window.hpetApi.login(email, pw); // 가입 후 자동 로그인
-        window.hpetStore.state.user.isLoggedIn = true;
+        
+        // 가입 성공 시 자동 로그인
+        await window.hpetApi.login(email, pw);
+        
+        const me = await window.hpetApi.getMyInfo();
+        if (me) {
+          window.hpetStore.state.user.name = me.name || '';
+        }
         window.hpetStore.saveState();
+        
+        // 약관 동의 이력 전송 (로그인 토큰을 얻은 후 전송)
+        if (window.hpetApi.submitAgreements) {
+          try {
+            await window.hpetApi.submitAgreements([
+              { type: 'TERMS_OF_SERVICE', version: '1.0', agreed: termsAgreed },
+              { type: 'PRIVACY_POLICY', version: '1.0', agreed: termsAgreed },
+              { type: 'HEALTH_INFO_COLLECTION', version: '1.0', agreed: termsAgreed }
+            ]);
+          } catch(e) { console.warn('Agreement submit failed', e); }
+        }
+
         window.hpetSound.playSuccess();
+        
+        // 회원가입 완료 후 바로 온보딩 화면(profileSetup)으로 진입!
         window.hpetRouter.navigateTo('profileSetup');
+        
+        // 폼 초기화 (다음에 돌아왔을 때를 대비)
+        document.getElementById('form-signup').reset();
+        
       } catch (err) {
         alert("회원가입 실패: " + err.message);
       }
     });
+
+    // Settings Button
+    const btnSettings = document.getElementById('btn-settings');
+    if (btnSettings) {
+      btnSettings.addEventListener('click', () => {
+        window.hpetRouter.navigateTo('profile');
+      });
+    }
 
     // Profile Setup Chips
     document.querySelectorAll('.chip-group:not(.multi) .chip').forEach(chip => {
@@ -372,7 +414,7 @@ const HPetUI = {
           gender: setup.selectedGender || 'female',
           concerns: setup.selectedConcerns || []
         });
-      } catch(err) {
+      } catch (err) {
         console.error("프로필 저장 실패", err);
       }
 
@@ -387,23 +429,23 @@ const HPetUI = {
       const suppNames = [];
       selectedCards.forEach(card => {
         const name = card.querySelector('.supp-name')?.textContent;
-        if(name) {
+        if (name) {
           suppNames.push(name.trim());
         }
       });
-      
+
       try {
         const masterSupps = await window.hpetApi.searchSupplements('');
         const idsToRegister = [];
         suppNames.forEach(name => {
-           const found = masterSupps.find(s => s.name === name);
-           if (found) idsToRegister.push(found.id);
+          const found = masterSupps.find(s => s.name === name);
+          if (found) idsToRegister.push(found.id);
         });
 
         if (idsToRegister.length > 0) {
           await window.hpetApi.addSupplement(idsToRegister);
         }
-      } catch(err) {
+      } catch (err) {
         console.error("영양제 등록 실패", err);
       }
 
@@ -426,10 +468,33 @@ const HPetUI = {
       });
     });
 
+    // Global State Sync
+    window.addEventListener('hpet_state_changed', (e) => {
+      const state = e.detail;
+      if (state && state.user && state.user.name) {
+        const headerName = document.getElementById('header-username');
+        if (headerName) headerName.textContent = `${state.user.name}님`;
+
+        const profileNameDisplay = document.getElementById('profile-name-display');
+        if (profileNameDisplay) profileNameDisplay.textContent = `${state.user.name}님`;
+      }
+    });
+
     // Quick Action Card Links
     document.getElementById('btn-action-auth')?.addEventListener('click', () => {
       window.hpetRouter.navigateTo('cameraAuth');
     });
+
+    document.getElementById('btn-action-posture')?.addEventListener('click', () => {
+      window.hpetRouter.navigateTo('postureGame');
+    });
+
+    const btnPostureGame = document.getElementById('btn-posture-game');
+    if (btnPostureGame) {
+      btnPostureGame.addEventListener('click', () => {
+        window.hpetRouter.navigateTo('postureGame');
+      });
+    }
 
     document.getElementById('btn-action-game')?.addEventListener('click', () => {
       window.hpetRouter.navigateTo('postureGame');
@@ -515,7 +580,7 @@ const HPetUI = {
   async renderRecommendations() {
     const container = document.getElementById('recommend-list');
     if (!container) return;
-    
+
     let items = [];
     try {
       items = await window.hpetApi.getRecommendations();
@@ -523,7 +588,7 @@ const HPetUI = {
       if (!Array.isArray(items) || items.length === 0) {
         throw new Error("No items");
       }
-    } catch(err) {
+    } catch (err) {
       console.warn("추천 API 연동 실패, 기본 데이터 사용", err);
       items = [
         { name: '비타민 C', reason: '피로 회복 & 항산화 케어 추천', icon: '🍋' },
@@ -560,7 +625,7 @@ const HPetUI = {
   async renderPetOptions() {
     const container = document.getElementById('pet-selection-grid');
     if (!container) return;
-    
+
     let pet = window.hpetStore.state.pet;
     try {
       // 서버에서 내 캐릭터 정보 조회
@@ -576,10 +641,10 @@ const HPetUI = {
       } else {
         throw new Error("캐릭터 정보 없음");
       }
-    } catch(err) {
+    } catch (err) {
       console.warn("캐릭터 API 실패, 로컬 배정 사용", err);
       // fallback
-      if(!pet.charImage) {
+      if (!pet.charImage) {
         pet = window.hpetStore.assignRandomChar();
       } else {
         pet.file = pet.charImage;
@@ -593,15 +658,6 @@ const HPetUI = {
         <p style="margin-top:8px;color:var(--text-mid);font-size:14px;white-space:normal;">건강 습관을 위한 여정을 함께 할게요.</p>
       </div>
     `;
-
-    // 상단 텍스트 수정
-    const step3 = document.getElementById('setup-step-3');
-    if(step3) {
-      const h2 = step3.querySelector('h2');
-      if(h2) h2.textContent = "파트너 HPet 캐릭터 배정 완료";
-      const desc = step3.querySelector('.step-desc');
-      if(desc) desc.textContent = "프로필 분석 결과에 맞춰 펫이 자동 배정되었어요!";
-    }
   },
 
   renderDashboard() {
@@ -613,7 +669,7 @@ const HPetUI = {
   renderHistory() {
     const calGrid = document.getElementById('calendar-grid');
     if (!calGrid) return;
-    
+
     let html = '';
     for (let i = 1; i <= 31; i++) {
       const isChecked = i <= 3; // Demo checked status

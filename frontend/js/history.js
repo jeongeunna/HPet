@@ -253,11 +253,23 @@ class HPetHistoryManager {
   }
 
   renderStats() {
-    const stats = window.hpetStore.state.stats;
-    
-    // 임의의 퍼센트 데이터 (실제 서비스에선 계산 로직 필요)
-    const suppPercent = 85; 
-    const turtleCount = stats.turtleNeckDetectionsThisWeek || 4;
+    const history = window.hpetStore.state.history || {};
+    let totalDays = 0;
+    let suppDays = 0;
+    let totalTurtleCount = 0;
+
+    // 현재 월의 데이터만 필터링
+    const currentPrefix = `${this.currentYear}-${String(this.currentMonth + 1).padStart(2, '0')}`;
+    Object.keys(history).forEach(date => {
+      if (date.startsWith(currentPrefix)) {
+        totalDays++;
+        if (history[date].supplements) suppDays++;
+        if (history[date].turtleCount) totalTurtleCount += history[date].turtleCount;
+      }
+    });
+
+    const suppPercent = totalDays > 0 ? Math.round((suppDays / totalDays) * 100) : 0;
+    const turtleCount = totalTurtleCount;
 
     const suppPercentEl = document.getElementById('stat-supp-percent');
     const suppBarEl = document.getElementById('stat-supp-bar');

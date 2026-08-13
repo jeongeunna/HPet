@@ -73,10 +73,19 @@ class HPetDashboardManager {
 
     const btnDeleteSupp = document.getElementById('btn-delete-supp');
     if (btnDeleteSupp) {
-      btnDeleteSupp.addEventListener('click', () => {
+      btnDeleteSupp.addEventListener('click', async () => {
         const modal = document.getElementById('modal-custom-supp');
         const idInput = modal.dataset.editId;
         if (idInput && confirm('이 영양제를 삭제하시겠습니까?')) {
+          try {
+            if (window.hpetApi.removeSupplement && idInput.startsWith('supp_') === false) { 
+              // 임시 데이터('supp_1' 등)가 아닐 경우 서버 삭제 시도
+              await window.hpetApi.removeSupplement(idInput);
+            }
+          } catch (e) {
+            console.warn('영양제 삭제 API 호출 실패:', e);
+          }
+          
           const state = window.hpetStore.state;
           window.hpetStore.state.supplements = state.supplements.filter(s => s.id !== idInput);
           window.hpetStore.saveState();

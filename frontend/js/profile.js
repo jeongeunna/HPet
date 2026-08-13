@@ -38,6 +38,22 @@ class HPetProfileManager {
       });
     }
 
+    // 푸시 알림 토글 (Notification CRUD)
+    const pushToggle = document.getElementById('toggle-push');
+    if (pushToggle) {
+      pushToggle.addEventListener('change', async (e) => {
+        const isEnabled = e.target.checked;
+        try {
+          if (window.hpetApi && window.hpetApi.saveAlarm) {
+            await window.hpetApi.saveAlarm({ type: 'ALL', enabled: isEnabled });
+          }
+        } catch (err) {
+          console.warn("알림 설정 실패", err);
+          e.target.checked = !isEnabled; // revert
+        }
+      });
+    }
+
     // 로그아웃
     const btnLogout = document.getElementById('btn-logout');
     if (btnLogout) {
@@ -57,8 +73,12 @@ class HPetProfileManager {
         if (confirm('정말 탈퇴하시겠습니까? 모든 펫 정보와 기록이 삭제되며 복구할 수 없습니다.')) {
           localStorage.removeItem('HPET_APP_STATE_V1');
           localStorage.removeItem('hpet_dark_mode');
-          alert('회원탈퇴가 완료되었습니다. 처음부터 다시 시작합니다.');
-          location.reload();
+          if (window.hpetApi) window.hpetApi.clearTokens();
+          alert('회원탈퇴가 완료되었습니다.');
+          
+          window.hpetStore.state = window.hpetStore.getInitialState();
+          window.hpetStore.state.user.isLoggedIn = false;
+          window.hpetRouter.navigateTo('auth');
         }
       });
     }

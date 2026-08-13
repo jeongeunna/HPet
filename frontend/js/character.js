@@ -197,10 +197,7 @@ class HPetCharacterEngine {
   initCloset() {
     this.availableItems = [
       { id: 'item_ribbon', name: '빨간 리본', icon: '🎀', type: 'head' },
-      { id: 'item_glasses', name: '선글라스', icon: '🕶️', type: 'face' },
-      { id: 'item_hat', name: '밀짚모자', icon: '👒', type: 'head' },
-      { id: 'item_tie', name: '넥타이', icon: '👔', type: 'body' },
-      { id: 'item_crown', name: '왕관', icon: '👑', type: 'head' }
+      { id: 'item_glasses', name: '선글라스', icon: '🕶️', type: 'face' }
     ];
 
     const btnCloset = document.getElementById('btn-closet');
@@ -225,9 +222,19 @@ class HPetCharacterEngine {
     }
 
     if (btnSaveCloset) {
-      btnSaveCloset.addEventListener('click', () => {
+      btnSaveCloset.addEventListener('click', async () => {
         window.hpetStore.state.pet.equippedItems = [...this.tempEquipped];
         window.hpetStore.saveState();
+        
+        // 아이템 장착 시 서버에 저장
+        try {
+          if (window.hpetApi.equipCharacterItem) {
+            const itemIdToSave = this.tempEquipped.length > 0 ? this.tempEquipped[0] : null;
+            await window.hpetApi.equipCharacterItem(itemIdToSave);
+          }
+        } catch (e) {
+          console.warn("아이템 장착 동기화 실패", e);
+        }
         
         // 아이템 장착 시 반짝이는 효과
         window.hpetSound.playSuccess();
@@ -259,10 +266,10 @@ class HPetCharacterEngine {
         
         if (this.tempEquipped.includes(id)) {
           // 장착 해제
-          this.tempEquipped = this.tempEquipped.filter(i => i !== id);
+          this.tempEquipped = [];
         } else {
-          // 같은 타입(head, face 등)이 있으면 교체 로직도 가능하나, 지금은 단순 다중 장착 허용
-          this.tempEquipped.push(id);
+          // 한 번에 1개만 장착
+          this.tempEquipped = [id];
         }
         
         this.renderCloset();
@@ -275,17 +282,24 @@ class HPetCharacterEngine {
     const previewLayer = document.getElementById('closet-preview-item');
     if (!previewLayer) return;
     
-    const icons = this.tempEquipped.map(id => {
+    const html = this.tempEquipped.map(id => {
       const item = this.availableItems.find(i => i.id === id);
-      return item ? item.icon : '';
+      if (!item) return '';
+      let style = '';
+      if (id === 'item_ribbon') {
+        style = 'position: absolute; top: -5%; right: 15%; font-size: 60px; transform: rotate(15deg); line-height: 1;';
+      } else if (id === 'item_glasses') {
+        style = 'position: absolute; top: 42%; left: 50%; transform: translate(-50%, 0); font-size: 75px; line-height: 1;';
+      }
+      return `<span style="${style}">${item.icon}</span>`;
     }).join('');
     
-    if (icons) {
-      previewLayer.textContent = icons;
+    if (html) {
+      previewLayer.innerHTML = html;
       previewLayer.style.display = 'block';
     } else {
       previewLayer.style.display = 'none';
-      previewLayer.textContent = '';
+      previewLayer.innerHTML = '';
     }
   }
 
@@ -298,27 +312,26 @@ class HPetCharacterEngine {
     // availableItems가 아직 선언 안됐을 수 있으므로 하드코딩된 리스트 임시 참조
     const allItems = this.availableItems || [
       { id: 'item_ribbon', icon: '🎀' },
-      { id: 'item_glasses', icon: '🕶️' },
-      { id: 'item_hat', icon: '👒' },
-      { id: 'item_tie', icon: '👔' },
-      { id: 'item_crown', icon: '👑' }
+      { id: 'item_glasses', icon: '🕶️' }
     ];
 
-    const icons = equipped.map(id => {
+    const html = equipped.map(id => {
       const item = allItems.find(i => i.id === id);
-      return item ? item.icon : '';
+      if (!item) return '';
+      let style = '';
+      if (id === 'item_ribbon') {
+        style = 'position: absolute; top: 5%; right: 15%; font-size: 80px; transform: rotate(15deg); line-height: 1; z-index: 6;';
+      } else if (id === 'item_glasses') {
+        style = 'position: absolute; top: 42%; left: 50%; transform: translate(-50%, 0); font-size: 85px; line-height: 1; z-index: 6;';
+      }
+      return `<span style="${style}">${item.icon}</span>`;
     }).join('');
 
-    if (icons) {
-      layer.textContent = icons;
-      // 위치 중앙 정렬용 스타일
-      layer.style.display = 'flex';
-      layer.style.justifyContent = 'center';
-      layer.style.alignItems = 'center';
-      layer.style.fontSize = '80px'; 
-      layer.style.zIndex = '5';
+    if (html) {
+      layer.innerHTML = html;
+      layer.style.display = 'block';
     } else {
-      layer.textContent = '';
+      layer.innerHTML = '';
       layer.style.display = 'none';
     }
   }

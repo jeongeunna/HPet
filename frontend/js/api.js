@@ -20,8 +20,8 @@ class HPetAPI {
 
   // 토큰 저장
   setTokens(accessToken, refreshToken) {
-    if (accessToken) localStorage.setItem('hpet_access_token', accessToken);
-    if (refreshToken) localStorage.setItem('hpet_refresh_token', refreshToken);
+    if (accessToken && accessToken !== 'undefined') localStorage.setItem('hpet_access_token', accessToken);
+    if (refreshToken && refreshToken !== 'undefined') localStorage.setItem('hpet_refresh_token', refreshToken);
   }
 
   // 로그아웃 처리 (토큰 삭제 및 홈 화면 이동)
@@ -78,13 +78,25 @@ class HPetAPI {
         try {
           errData = await response.json();
         } catch(e) {}
-        throw new Error(errData.message || `API Error: ${response.status}`);
+        
+        let errorMsg = `API Error: ${response.status}`;
+        if (errData && errData.error && errData.error.message) {
+          errorMsg = errData.error.message;
+        } else if (errData && errData.message) {
+          errorMsg = errData.message;
+        }
+        
+        throw new Error(errorMsg);
       }
 
       // 응답 본문이 없는 경우(204 No Content 등) 대비
       const contentType = response.headers.get("content-type");
       if (contentType && contentType.includes("application/json")) {
-        return await response.json();
+        const json = await response.json();
+        if (json.success === false) {
+          throw new Error(json.error?.message || "API Error");
+        }
+        return json.data !== undefined ? json.data : json;
       }
       return null;
 
@@ -103,9 +115,12 @@ class HPetAPI {
         body: JSON.stringify({ refreshToken: this.getRefreshToken() })
       });
       if (response.ok) {
-        const data = await response.json();
-        this.setTokens(data.accessToken, data.refreshToken);
-        return true;
+        const resJson = await response.json();
+        const data = resJson.data !== undefined ? resJson.data : resJson;
+        if (data && data.accessToken) {
+          this.setTokens(data.accessToken, data.refreshToken);
+          return true;
+        }
       }
       return false;
     } catch (e) {
@@ -132,6 +147,27 @@ class HPetAPI {
     });
   }
 
+  async sendEmailCode(email) {
+    return await this.request('/auth/email-verification/send', {
+      method: 'POST',
+      body: JSON.stringify({ email })
+    });
+  }
+
+  async verifyEmailCode(email, code) {
+    return await this.request('/auth/email-verification/verify', {
+      method: 'POST',
+      body: JSON.stringify({ email, code })
+    });
+  }
+
+  async resetPassword(email) {
+    return await this.request('/auth/password-reset/send', {
+      method: 'POST',
+      body: JSON.stringify({ email })
+    });
+  }
+
   async logout() {
     try {
       await this.request('/auth/logout', { method: 'POST' });
@@ -148,6 +184,13 @@ class HPetAPI {
     return await this.request('/users/me/agreements', {
       method: 'POST',
       body: JSON.stringify(agreements)
+    });
+  }
+
+  async registerDeviceToken(token) {
+    return await this.request('/device-tokens', {
+      method: 'POST',
+      body: JSON.stringify({ token })
     });
   }
 
@@ -175,6 +218,10 @@ class HPetAPI {
     });
   }
 
+  async removeSupplement(id) {
+    return await this.request(`/users/me/supplements/${id}`, { method: 'DELETE' });
+  }
+
   async searchSupplements(keyword) {
     return await this.request(`/supplements?keyword=${encodeURIComponent(keyword)}`, { method: 'GET' });
   }
@@ -184,6 +231,13 @@ class HPetAPI {
   // ==========================================
   async getMyCharacter() {
     return await this.request('/character/me', { method: 'GET' });
+  }
+
+  async equipCharacterItem(itemId) {
+    return await this.request('/character/me/items', {
+      method: 'PUT',
+      body: JSON.stringify({ itemId })
+    });
   }
 
   // ==========================================
@@ -254,6 +308,20 @@ class HPetAPI {
     const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
     return await this.request(`/posture-events/summary?startDate=${startDate}&endDate=${endDate}`, { method: 'GET' });
+  }
+
+  // ==========================================
+  // Notification API
+  // ==========================================
+  async getAlarms() {
+    return await this.request('/notifications', { method: 'GET' });
+  }
+
+  async saveAlarm(alarmData) {
+    return await this.request('/notifications', {
+      method: 'POST',
+      body: JSON.stringify(alarmData)
+    });
   }
 }
 
